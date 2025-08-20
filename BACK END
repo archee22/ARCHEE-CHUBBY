@@ -1,0 +1,122 @@
+# backend_fin.py
+
+import psycopg2
+from datetime import datetime
+import uuid
+
+# Database connection details
+DB_NAME = "your_db_name"
+DB_USER = "your_db_user"
+DB_PASS = "your_db_password"
+DB_HOST = "localhost"  # Or your host IP/domain
+DB_PORT = "5432"
+
+def get_db_connection():
+    """Establishes and returns a database connection."""
+    conn = psycopg2.connect(
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        host=DB_HOST,
+        port=DB_PORT
+    )
+    return conn
+
+def create_table_if_not_exists():
+    """Creates the 'transactions' table if it doesn't already exist."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                transaction_id VARCHAR(255) PRIMARY KEY,
+                transaction_date DATE NOT NULL,
+                description TEXT,
+                amount DECIMAL(10, 2) NOT NULL,
+                type VARCHAR(20) CHECK (type IN ('Revenue', 'Expense'))
+            );
+        """)
+        conn.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error while creating table: {error}")
+    finally:
+        cursor.close()
+        conn.close()
+
+def add_transaction(transaction_date, description, amount, transaction_type):
+    """Inserts a new transaction into the database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        transaction_id = str(uuid.uuid4())
+        cursor.execute("""
+            INSERT INTO transactions (transaction_id, transaction_date, description, amount, type)
+            VALUES (%s, %s, %s, %s, %s);
+        """, (transaction_id, transaction_date, description, amount, transaction_type))
+        conn.commit()
+        return True
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error while adding transaction: {error}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_transactions(filter_type=None, sort_by=None):
+    """Fetches all transactions, with optional filtering and sorting."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        query = "SELECT * FROM transactions"
+        params = []
+        if filter_type and filter_type != "All":
+            query += " WHERE type = %s"
+            params.append(filter_type)
+        
+        if sort_by == 'amount':
+            query += " ORDER BY amount DESC"
+        elif sort_by == 'transaction_date':
+            query += " ORDER BY transaction_date DESC"
+        
+        cursor.execute(query, params)
+        transactions = cursor.fetchall()
+        return transactions
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error while fetching transactions: {error}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_business_insights():
+    """Calculates and returns key business metrics."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Total count
+        cursor.execute("SELECT COUNT(*) FROM transactions")
+        total_transactions = cursor.fetchone()[0]
+        
+        # Total revenue
+        cursor.execute("SELECT SUM(amount) FROM transactions WHERE type = 'Revenue'")
+        total_revenue = cursor.fetchone()[0] or 0
+        
+        # Total expenses
+        cursor.execute("SELECT SUM(amount) FROM transactions WHERE type = 'Expense'")
+        total_expenses = cursor.fetchone()[0] or 0
+        
+        # Net income
+        net_income = total_revenue - total_expenses
+        
+        return {
+            "total_transactions": total_transactions,
+            "total_revenue": total_revenue,
+            "total_expenses": total_expenses,
+            "net_income": net_income
+        }
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error while getting business insights: {error}")
+        return {}
+    finally:
+        cursor.close()
+        conn.close()
