@@ -1,0 +1,85 @@
+# frontend_fin.py
+
+import streamlit as st
+from datetime import datetime
+import pandas as pd
+from backend_fin import (
+    create_table_if_not_exists,
+    get_transactions,
+    add_transaction,
+    get_business_insights
+)
+
+# Run this once to ensure the table exists
+create_table_if_not_exists()
+
+st.set_page_config(
+    page_title="Revenue & Expense Tracker",
+    page_icon="📊",
+    layout="wide"
+)
+
+# Main title
+st.title("Finance: Revenue & Expense Tracker 📊")
+st.markdown("A simple application to monitor a business's financial health.")
+
+# --- Business Insights Section ---
+st.header("Business Insights")
+insights = get_business_insights()
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(label="Total Transactions", value=insights.get("total_transactions", 0))
+
+with col2:
+    st.metric(label="Total Revenue", value=f"${insights.get('total_revenue', 0):,.2f}")
+
+with col3:
+    st.metric(label="Total Expenses", value=f"${insights.get('total_expenses', 0):,.2f}")
+
+with col4:
+    st.metric(label="Net Income", value=f"${insights.get('net_income', 0):,.2f}")
+
+st.markdown("---")
+
+# --- Add New Transaction Form ---
+st.header("Add New Transaction")
+with st.form("add_transaction_form"):
+    col_date, col_type = st.columns(2)
+    with col_date:
+        transaction_date = st.date_input("Date", datetime.now())
+    with col_type:
+        transaction_type = st.selectbox("Type", ["Revenue", "Expense"])
+    
+    description = st.text_input("Description")
+    amount = st.number_input("Amount", min_value=0.01, format="%.2f")
+
+    submitted = st.form_submit_button("Add Transaction")
+    if submitted:
+        if add_transaction(transaction_date, description, amount, transaction_type):
+            st.success("Transaction added successfully!")
+            st.experimental_rerun()
+        else:
+            st.error("Failed to add transaction. Please check your database connection.")
+
+st.markdown("---")
+
+# --- Display & Filter Transactions Section ---
+st.header("All Transactions")
+
+# Filtering and Sorting options
+col_filter, col_sort = st.columns(2)
+with col_filter:
+    filter_type = st.selectbox("Filter by Type", ["All", "Revenue", "Expense"])
+with col_sort:
+    sort_by = st.selectbox("Sort By", ["", "amount", "transaction_date"])
+
+transactions_data = get_transactions(filter_type, sort_by)
+
+if transactions_data:
+    # Convert to DataFrame for easy display
+    df = pd.DataFrame(transactions_data, columns=["ID", "Date", "Description", "Amount", "Type"])
+    st.dataframe(df)
+else:
+    st.info("No transactions to display.")
